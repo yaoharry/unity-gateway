@@ -30,6 +30,11 @@ The same component suite checks ownership retention across an empty search-model
 catalog and subsequent external handoff or standalone refresh. That recovery path
 does not yet have a live integration journey.
 
+Fresh Claude-only search discovery and registration are covered by component
+tests in `../test_claude_search_discovery.py`, including legacy catalog fallback,
+an explicit model override, and no available GPT model. Live search remains
+outside this integration suite.
+
 The sudo-session regression checks live in `../test_managed_files.py` and `../test_cli.py`.
 They cover shared-worker invocation counts, shutdown/cancellation, and temporary-file failure
 handling without sudo.
@@ -221,6 +226,10 @@ PATH conflicts for the Smart Router skill have subprocess/component coverage in
 `ug` first in PATH. The live journeys above do not inject a second installation or
 establish PowerShell command execution.
 
+The portable `../test_claude_windows_smart_routing.py` checks the Windows
+subagent-only fallback without Unix imports. Native Windows TUI and hook execution
+remain outside this integration suite.
+
 The relayed CUJ launches Claude through a relayed (subscription-relay) MPS and
 completes a file task on two models: a bare Anthropic id the subscription serves
 directly (`route=relay`) and a Databricks-hosted `system.ai` id the loopback proxy
@@ -312,10 +321,11 @@ and managed skill cleanup. The two Claude default-model cases read published MPS
 Catalog sources directly from `eng-ml-inference-batch-inference-us-west-2` and
 `eng-ml-inference-ap-northeast-2`, respectively, then verify both generated settings files retain
 all admin-authored family defaults. Their replacement pickers contain those mapped defaults plus
-the independently fetched catalog for MPS. Labeled default rows appear first, followed by every
-catalog model, including models also used as defaults; catalog labels are retained. Direct renderer
-tests cover default/catalog composition, while focused CLI regressions cover partial family
-mappings, explicit model selection, and preservation of static model lists. Neither case injects
+the independently fetched MPS or UC schema catalog. MPS family shortcut rows remain separate
+from catalog rows for the same target; UC model IDs are deduplicated and catalog labels are retained.
+Direct renderer tests cover default/catalog composition, while focused CLI regressions verify UC
+catalog discovery with overall defaults, family defaults, or both, along with explicit model
+selection and preservation of static model lists. Neither case injects
 a config. Each obtains a token for its
 target workspace using OAuth client credentials. The two target service-principal client IDs are
 constants in the runner; CI only needs `UG_MPS_DEFAULTS_CLIENT_SECRET` for west-2 and
@@ -346,6 +356,10 @@ agents are outside this focused revision.
 Custom OAuth search dispatch and refresh are covered by component tests in
 `../test_mcp_web_search.py`; no live search request, delegated search, or classifier
 permission decision is asserted by those tests or this integration suite.
+`../test_mcp_web_search_concurrency.py` separately covers stdio search concurrency,
+the four-worker limit, cancellation, worker errors, EOF draining, and interrupted
+input cleanup with controlled auth/HTTP boundaries. It does not establish live
+gateway concurrency or latency.
 External-provider ownership has local configuration/subprocess coverage in
 `../test_claude_search_provider.py`. Live Isaac provider discovery and search,
 including both parent and child catalogs, remain separate acceptance work.
