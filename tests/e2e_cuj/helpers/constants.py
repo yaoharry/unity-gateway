@@ -16,6 +16,17 @@ INFERENCE_PATHS = {
     CODEX: "/ai-gateway/codex/v1/responses",
 }
 
+# Env keys ug writes to export Claude Code traces.
+CLAUDE_TRACE_ENV_KEYS = (
+    "CLAUDE_CODE_ENABLE_TELEMETRY",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS",
+    "CLAUDE_CODE_PROPAGATE_TRACEPARENT",
+)
+
 
 class CodingAgent(StrEnum):
     CLAUDE_CODE = "CODING_AGENT_CLAUDE_CODE"
@@ -34,3 +45,10 @@ MODEL_PROVIDER_SERVICE_FIXTURES = {
 
 SANDBOX_MCP_SERVICE_NAME = "system.ai.sandbox"
 WEB_SEARCH_MCP_SERVICE_NAME = "system.ai.web_search"
+
+BEDROCK_PROVIDER_SERVICE_FIXTURE = (
+    "ug_e2e.providers.bedrock",
+    "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+)
+UC_MODEL_LOCATION_FIXTURE = ("ug_e2e.models", "ug_e2e.models.codex_primary")
+FIXTURE_READER_MCP_SERVICE_NAME = "ug_e2e.tools.fixture_reader"
