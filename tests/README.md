@@ -9,6 +9,7 @@ mocks, monkeypatching, fake binaries/services, or fabricated ug state.
 | Unit/component | Existing `test_*.py` files | Individual behavior; dependencies may be mocked |
 | Existing e2e | `test_e2e*.py` | Real workspace behavior with some patched setup/internal calls |
 | Integration CUJs | `integration/test_*.py` | Public configure, TUI, script, command, protocol, and lifecycle journeys |
+| Dedicated-workspace CUJs | `e2e_cuj/test_*.py` | Published workspace policy, real agent tasks, and observable agent traces |
 | Installation | `integration/test_installation.py` | Fresh installed package, CLI, and local helpers without credentials on Linux and advisory native Windows |
 
 `test_entry_points.py` also runs both installed console scripts (`ug` and `ucode`)
