@@ -49,6 +49,7 @@ from ucode.databricks import (
     resolve_current_budget_spend,
     upgrade_databricks_cli,
     workspace_hostname,
+    workspace_origin,
 )
 
 WS = "https://example.databricks.com"
@@ -191,6 +192,9 @@ class TestWorkspaceHostname:
     def test_invalid_url_raises(self):
         with pytest.raises((RuntimeError, ValueError)):
             workspace_hostname("")
+
+    def test_origin_preserves_explicit_scheme_and_port(self):
+        assert workspace_origin("http://127.0.0.1:54321/path") == "http://127.0.0.1:54321"
 
 
 class _FakeResponseWithHeaders(_FakeResponse):
@@ -642,6 +646,19 @@ class TestDiscoverModelServices:
         # foundation models rather than walking the whole metastore.
         assert all("parent=schemas%2Fsystem.ai" in u for u in urls)
 
+    def test_preserves_http_origin_and_port_for_local_gateway_recorder(self, monkeypatch):
+        urls = []
+
+        def fake_page(url, token):
+            urls.append(url)
+            return {"model_services": [_model_service("system.ai.gpt-5")]}, None
+
+        monkeypatch.setattr(db_mod, "_get_model_services_page", fake_page)
+
+        db_mod.list_model_services("http://127.0.0.1:54321", "token", use_cache=False)
+
+        assert urls[0].startswith("http://127.0.0.1:54321/api/")
+
     def test_retries_page_before_giving_up(self, monkeypatch):
         payload = {"model_services": [_model_service("system.ai.gpt-5")]}
         calls = {"n": 0}
@@ -1035,6 +1052,20 @@ class TestProviderServicePagination:
 
         assert "page_size=" in seen["url"]
 
+    def test_preserves_loopback_workspace_origin(self, monkeypatch):
+        seen: dict = {}
+
+        def fake_get(url, token, **kwargs):
+            seen["url"] = url
+            return self._page(["main.s.one"]), None
+
+        monkeypatch.setattr(db_mod, "_http_get_json", fake_get)
+        db_mod.list_model_provider_services("http://127.0.0.1:54321", "tok", use_cache=False)
+
+        assert seen["url"].startswith(
+            "http://127.0.0.1:54321/api/2.1/unity-catalog/model-provider-services?"
+        )
+
 
 class TestGetModelProviderService:
     def test_addresses_the_service_directly(self, monkeypatch):
@@ -1060,6 +1091,26 @@ class TestGetModelProviderService:
         assert service["name"] == "main.tien_le.openai_all"
         assert service["allow_all_targets"] is True
         assert seen["url"].endswith("/model-provider-services/main.tien_le.openai_all")
+
+    def test_preserves_loopback_workspace_origin(self, monkeypatch):
+        seen: dict = {}
+
+        def fake_get(url, token, **kwargs):
+            seen["url"] = url
+            return {
+                "name": "model-provider-services/main.tien_le.openai_all",
+                "config": {"provider_type": "EXTERNAL_MODEL_PROVIDER_TYPE_OPENAI"},
+            }, None
+
+        monkeypatch.setattr(db_mod, "_http_get_json", fake_get)
+        db_mod.get_model_provider_service(
+            "main.tien_le.openai_all", "http://127.0.0.1:54321", "tok"
+        )
+
+        assert seen["url"] == (
+            "http://127.0.0.1:54321/api/2.1/unity-catalog/"
+            "model-provider-services/main.tien_le.openai_all"
+        )
 
     def test_missing_service_returns_the_reason(self, monkeypatch):
         monkeypatch.setattr(
@@ -2358,6 +2409,19 @@ class TestListDatabricksApps:
 
 
 class TestProbeUnityGatewayCapabilities:
+    def test_probe_preserves_http_origin_and_port_for_local_gateway_recorder(self, monkeypatch):
+        calls = []
+
+        def fake_get(url, token):
+            calls.append(url)
+            return {"model_services": [{"name": "model-services/system.ai.gpt-5"}]}, None
+
+        monkeypatch.setattr(db_mod, "_http_get_json", fake_get)
+
+        db_mod.probe_unity_gateway_capabilities("http://127.0.0.1:54321", "fake-token")
+
+        assert calls == ["http://127.0.0.1:54321/api/2.1/unity-catalog/model-services?page_size=50"]
+
     def test_model_service_resource_returns_success(self, monkeypatch):
         calls: list[str] = []
 
