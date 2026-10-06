@@ -231,10 +231,12 @@ dependency graph to reproduce a user's combination. Every relevant same-reposito
 PR and push to `main` runs both smoke and the full CUJ suite. Smoke covers the
 Databricks Hosted configure/TUI, custom OAuth CLI TUI, and headless argument
 journeys for both agents, in two parallel jobs. After smoke finishes, the full
-suite runs all 68 live cases across two parallel agent jobs: one Claude VM and one
+suite runs 66 live cases across two parallel agent jobs: one Claude VM and one
 Codex VM, each running its configure, headless, and commands/lifecycle cases
 serially. Each agent is installed once for the full suite, and no two full jobs
 for the same agent overlap within a run.
+CUJ7's two configured discovery cases run in the required `dedicated-cuj` job,
+using the shared CUJ scaffolding and `UG_CUJ7_WORKSPACE` repository secret.
 CI starts integration alongside unit tests and the existing e2e shards. Integration
 does not wait for agent e2e or get skipped when an agent shard fails. These suites
 share workspace capacity; overlapping their requests can still encounter rate limits.
