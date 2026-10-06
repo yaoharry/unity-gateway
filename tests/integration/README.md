@@ -28,6 +28,11 @@ These component checks do not establish live installer, Isaac, or inference cove
 The live Claude/Codex headless prompt-argument and stdin journeys require raw stdout to parse
 as JSON/JSONL, without discarding non-JSON lines before checking the completed file task.
 
+Headless managed-settings conflict repair is covered by `../test_agent_claude.py`,
+`../test_agent_codex.py`, and `../test_managed_files.py` using temporary files and substituted
+privileged writes. This suite does not yet exercise Isaac rewriting OS-managed settings or real
+`sudo -n` authorization on a devbox.
+
 The `smart_defaults` wire schema, legacy `spend_tiers` cache reads, and recommendation
 request gating are covered by unit/component tests listed in `../README.md`. This suite
 does not yet assert live `recommendModel` request counts for configs with and without tiers.
