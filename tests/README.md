@@ -131,10 +131,18 @@ that Claude settings and Codex's shell policy carry the interpreter and session 
 These are component checks; they do not establish native skill permission matching or
 PowerShell execution.
 
-`test_orchestrator_config.py` covers the bundled orchestrator's preferences,
-ownership, locking, interrupted-write recovery, and UG catalog precedence. It
-also checks that model resolution refuses delegation outside an enabled
-smart-routing session. These checks do not make model calls or activate hooks.
+`test_orchestrator.py` covers shared routing state, off/on transitions, suppression
+of retained skills outside eligible sessions, root prompts and compaction,
+user-hook preservation, and bundled Claude roles. `test_orchestrator_config.py`
+ports the plugin's preference, ownership, locking, and interrupted-write recovery
+coverage and checks UG catalog precedence. `test_orchestrator_legacy_plugins.py`
+and the Claude/Codex launcher tests check native per-launch overrides that disable
+legacy marketplace registrations with routing on or off, including Codex's
+app-server and remote TUI. They check config discovery, unrelated-plugin and hook
+preservation, and unchanged saved settings. These are configuration/argv assertions.
+The toggle integration journeys require both bundled skills but explicitly request
+their children, including while routing is off. Live automatic delegation and
+legacy-hook execution are not covered by these tests.
 
 The portable Windows routing test checks native executable forwarding, generated
 hooks/plugins, caller arguments, and cleanup without Unix imports. It does not
