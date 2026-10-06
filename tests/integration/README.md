@@ -7,6 +7,10 @@ Its Claude/Codex evidence helpers keep scenario-specific assertions separate fro
 Workspace config/catalog reads use its base class's Databricks SDK client. Configuration
 is read-only and checked for changes at teardown; concurrent readers need no reservation.
 
+The [catalog discovery journey](../e2e_cuj/README.md) uses the CUJ3 workspace to check
+agent-compatible pickers, schema exclusions, configured defaults, and real inference.
+CI collects it through the shared `dedicated-cuj` job.
+
 This suite runs the **installed product** through subprocesses, against the same
 `UCODE_TEST_WORKSPACE` used by the existing e2e tests. It does not import `ucode`,
 patch application functions, substitute agent executables, run a fake gateway,
