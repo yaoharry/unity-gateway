@@ -14,7 +14,7 @@ import time
 import tomllib
 from importlib import metadata
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 from prompt_toolkit.application import create_app_session
@@ -8160,6 +8160,102 @@ class TestConfigureSharedStateSkipPreflight:
 
         assert "workspace_id" not in state
         assert "workspace_id" not in saved[-1]
+
+
+class TestConfigureSharedStateSnapshotReuse:
+    """Reuse local state within a configure call, while reading fresh state on each call."""
+
+    WS = TestConfigureSharedStateSkipPreflight.WS
+
+    def test_same_workspace_loads_and_hydrates_once(self, monkeypatch):
+        cli, saved = TestConfigureSharedStateSkipPreflight._stub(monkeypatch)
+        original = {
+            "workspace": self.WS,
+            "codex_models": ["saved-model"],
+            "self_managed_agents": ["claude"],
+        }
+        load = Mock(return_value=original)
+        monkeypatch.setattr(cli, "load_state", load)
+        monkeypatch.setattr(cli, "workspace_self_managed_agents", Mock(return_value=["claude"]))
+
+        result = cli.configure_shared_state(self.WS, profile="DEFAULT", skip_preflight=True)
+
+        load.assert_called_once_with()
+        assert result["codex_models"] == ["saved-model"]
+        assert result["self_managed_agents"] == ["claude"]
+        assert saved[-1]["self_managed_agents"] == ["claude"]
+
+    def test_each_call_reads_fresh_workspace_state(self, monkeypatch):
+        cli, _ = TestConfigureSharedStateSkipPreflight._stub(monkeypatch)
+        load = Mock(
+            side_effect=[
+                {"workspace": self.WS, "self_managed_agents": ["claude"]},
+                {"workspace": self.WS, "self_managed_agents": ["codex"]},
+            ]
+        )
+        monkeypatch.setattr(cli, "load_state", load)
+        monkeypatch.setattr(
+            cli, "workspace_self_managed_agents", Mock(side_effect=[["claude"], ["codex"]])
+        )
+
+        first = cli.configure_shared_state(self.WS, profile="DEFAULT", skip_preflight=True)
+        second = cli.configure_shared_state(self.WS, profile="DEFAULT", skip_preflight=True)
+
+        assert load.call_count == 2
+        assert first["self_managed_agents"] == ["claude"]
+        assert second["self_managed_agents"] == ["codex"]
+
+    def test_dangling_alias_never_grants_self_managed_access(self, monkeypatch):
+        from ucode import state as state_mod
+
+        cli, _ = TestConfigureSharedStateSkipPreflight._stub(monkeypatch)
+        state_mod.STATE_PATH.write_text(
+            json.dumps(
+                {
+                    "state_version": state_mod.STATE_VERSION,
+                    "current_workspace": self.WS,
+                    "workspaces": {
+                        self.WS: {
+                            state_mod.ALIAS_OF_KEY: cli.workspace_key(self.WS, "111"),
+                            "self_managed_agents": ["claude"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = cli.configure_shared_state(self.WS, profile="DEFAULT", skip_preflight=True)
+
+        assert "self_managed_agents" not in result
+
+    def test_workspace_switch_reuses_destination_for_mcp_and_catalog(self, monkeypatch):
+        cli, saved = TestConfigureSharedStateSkipPreflight._stub(monkeypatch)
+        shared = "https://acme.cloud.databricks.com"
+        target = cli.workspace_key(shared, "222")
+        monkeypatch.setattr(
+            cli,
+            "load_state",
+            Mock(return_value={"workspace": shared, "workspace_id": "111"}),
+        )
+        catalog = {"models": ["destination-model"]}
+        destination = {
+            "mcp_servers": [{"name": "destination-mcp"}],
+            "copilot_catalog": catalog,
+        }
+        registry = Mock(return_value={"workspaces": {target: destination}})
+        monkeypatch.setattr(cli, "load_full_state", registry)
+        monkeypatch.setattr(cli, "workspace_self_managed_agents", lambda key: ["codex"])
+        monkeypatch.setattr(cli, "_purge_after_workspace_switch", Mock())
+
+        result = cli.configure_shared_state(target, profile="DEFAULT", skip_preflight=True)
+
+        registry.assert_called_once_with()
+        assert result["workspace_id"] == "222"
+        assert result["mcp_servers"] == destination["mcp_servers"]
+        assert result["copilot_catalog"] == catalog
+        assert result["self_managed_agents"] == ["codex"]
+        assert saved[-1]["workspace_id"] == "222"
 
 
 class TestSkipPreflightFlag:

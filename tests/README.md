@@ -1,5 +1,10 @@
 # Test suites and user journeys
 
+`TestConfigureSharedStateSnapshotReuse` in `test_cli.py` checks one current-state
+load/hydration per preparation, fresh reads on subsequent calls, destination MCP
+and Copilot catalog snapshot reuse, and preservation of dangling-alias safeguards.
+These component checks do not measure live gateway or agent startup.
+
 `TestSpinner` in `test_ui.py` covers interrupting the animation's frame wait on
 normal and exceptional exit, clearing the terminal line, and leaving redirected
 output free of animation threads. These component

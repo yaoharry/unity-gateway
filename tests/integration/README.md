@@ -1,5 +1,9 @@
 # Integration tests
 
+`../test_cli.py` covers operation-local startup state reuse, fresh subsequent
+reads and selected-workspace/alias preservation. The synthetic registry benchmark
+is local component evidence, not a live agent or gateway timing result.
+
 Provider target component tests filter Claude targets by Messages API metadata across
 Anthropic, Bedrock, Mantle, Foundry, and custom providers, and Codex targets by Responses API
 metadata across OpenAI, Azure OpenAI, Foundry, Bedrock, Mantle, and custom providers. They
