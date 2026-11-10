@@ -3,7 +3,8 @@
 Launchers such as isaac run ``ug --version`` on every start. Importing ``ucode.cli`` (Typer, Rich,
 questionary, every subcommand module) costs far more than printing the version, so a bare version
 request is answered here without importing it. The per-agent MCP proxy also skips agent setup
-imports. Other invocations go to ``ucode.cli.main``.
+imports, and so does the Cowork hook that runs before every prompt. Other invocations go to
+``ucode.cli.main``.
 """
 
 from __future__ import annotations
@@ -72,6 +73,12 @@ def main() -> None:
         from ucode.mcp_proxy_runtime import main as proxy_main
 
         proxy_main()
+        return
+
+    if sys.argv[1:2] == ["cowork-hook"] and "--help" not in sys.argv[2:]:
+        from ucode.cowork_hook_runtime import main as cowork_hook_main
+
+        cowork_hook_main(sys.argv[2:])
         return
 
     from ucode.cli import main as cli_main

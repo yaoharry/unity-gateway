@@ -1,5 +1,6 @@
 """Cowork connector hooks: token warm-up, upstream probes, idle detection, and guidance."""
 
+import io
 import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from ucode import cli
+from ucode import cli, entrypoint, workspace
 from ucode.agents.desktop import cowork_hooks
 
 SERVERS = {
@@ -247,7 +248,9 @@ def test_cli_writes_only_hook_json_to_stdout(probes):
 
 def test_cli_pins_the_workspace_selection(probes, monkeypatch):
     pinned = []
-    monkeypatch.setattr(cli, "pin", lambda host, workspace_id: pinned.append((host, workspace_id)))
+    monkeypatch.setattr(
+        workspace, "pin", lambda host, workspace_id: pinned.append((host, workspace_id))
+    )
     result = CliRunner().invoke(
         cli.app,
         [
@@ -264,3 +267,80 @@ def test_cli_pins_the_workspace_selection(probes, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert pinned == [("https://workspace.example", "111")]
+
+
+def _run_entrypoint(monkeypatch, capsys, payload, *args):
+    monkeypatch.setattr("sys.argv", ["ug", "cowork-hook", *args])
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    entrypoint.main()
+    return capsys.readouterr()
+
+
+def test_entrypoint_runs_the_hook_without_the_cli(probes, monkeypatch, capsys):
+    calls, _, _ = probes
+    pinned = []
+    monkeypatch.setattr(
+        workspace, "pin", lambda host, workspace_id: pinned.append((host, workspace_id))
+    )
+    monkeypatch.setattr(cli, "main", lambda: pytest.fail("the full CLI should not run"))
+
+    captured = _run_entrypoint(
+        monkeypatch,
+        capsys,
+        {"hook_event_name": "SessionStart", "source": "startup"},
+        "--host=https://workspace.example",
+        "--profile",
+        "chosen",
+        "--workspace-id",
+        "111",
+        "--server",
+        f"github={SERVERS['github']}",
+        "--server",
+        f"jira={SERVERS['jira']}",
+    )
+
+    assert "`github`, `jira`" in _context(json.loads(captured.out), "SessionStart")
+    assert sorted(calls) == sorted((url, "tok") for url in SERVERS.values())
+    assert pinned == [("https://workspace.example", "111")]
+
+
+def test_entrypoint_prompt_after_short_gap_writes_nothing(probes, tmp_path, monkeypatch, capsys):
+    calls, _, _ = probes
+    monkeypatch.setattr(
+        workspace, "pin", lambda *args: pytest.fail("a prompt without a probe makes no request")
+    )
+    stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    path = _transcript(tmp_path, {"type": "assistant", "timestamp": stamp})
+
+    captured = _run_entrypoint(
+        monkeypatch,
+        capsys,
+        {"hook_event_name": "UserPromptSubmit", "transcript_path": path},
+        "--host",
+        "https://workspace.example",
+        "--workspace-id",
+        "111",
+        "--server",
+        f"github={SERVERS['github']}",
+    )
+
+    assert captured.out == ""
+    assert calls == []
+
+
+def test_entrypoint_rejects_a_hook_without_servers(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as exc:
+        _run_entrypoint(monkeypatch, capsys, {}, "--host", "https://workspace.example")
+
+    # The CLI command also requires --server and exits with a usage error.
+    assert exc.value.code == 2
+
+
+def test_entrypoint_sends_help_to_the_cli(monkeypatch):
+    ran = []
+    monkeypatch.setattr("sys.argv", ["ug", "cowork-hook", "--help"])
+    monkeypatch.setattr(cli, "main", lambda: ran.append(True))
+
+    entrypoint.main()
+
+    assert ran == [True]

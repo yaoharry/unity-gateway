@@ -8,14 +8,13 @@ and on UserPromptSubmit after an idle gap.
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from pathlib import Path
 
 import anyio
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
+from ucode.cowork_hook_runtime import needs_probe
 from ucode.databricks import ensure_pat_bearer, get_databricks_token
 from ucode.mcp_proxy import (
     CONNECTION_AUTH_REQUIRED_ERROR_CODE,
@@ -28,9 +27,6 @@ from ucode.workspace import workspace_headers
 SESSION_START_PROBE_TIMEOUT_SECONDS = 15.0
 # UserPromptSubmit blocks the prompt and has a 30-second default timeout.
 PROMPT_PROBE_TIMEOUT_SECONDS = 10.0
-# Cowork was observed dropping idle connectors after about five minutes.
-IDLE_GAP_SECONDS = 180.0
-TRANSCRIPT_TAIL_BYTES = 256 * 1024
 READY = "ready"
 NEEDS_SIGN_IN = "needs_sign_in"
 SIGN_IN_ERROR_CODES = {CONNECTION_AUTH_REQUIRED_ERROR_CODE, URL_ELICITATION_REQUIRED_ERROR_CODE}
@@ -45,10 +41,10 @@ def hook_output(
     use_pat: bool = False,
     now: datetime | None = None,
 ) -> dict:
-    if not isinstance(payload, dict) or not servers:
+    current = now or datetime.now(UTC)
+    if not isinstance(payload, dict) or not needs_probe(payload, servers, current):
         return {}
     event = payload.get("hook_event_name")
-    current = now or datetime.now(UTC)
     if event == "SessionStart":
         statuses = _warm(
             servers,
@@ -58,16 +54,11 @@ def hook_output(
             timeout=SESSION_START_PROBE_TIMEOUT_SECONDS,
         )
         context = session_start_context(list(servers), statuses, current)
-    elif event == "UserPromptSubmit":
-        last_reply = _last_assistant_time(payload.get("transcript_path"))
-        if last_reply is None or (current - last_reply).total_seconds() < IDLE_GAP_SECONDS:
-            return {}
+    else:
         statuses = _warm(
             servers, workspace, profile, use_pat=use_pat, timeout=PROMPT_PROBE_TIMEOUT_SECONDS
         )
         context = idle_resume_context(list(servers), statuses, current)
-    else:
-        return {}
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
 
 
@@ -116,32 +107,6 @@ def _stamp(checked_at: datetime) -> str:
 
 def _quoted(names: list[str]) -> str:
     return ", ".join(f"`{name}`" for name in names)
-
-
-def _last_assistant_time(transcript_path: object) -> datetime | None:
-    # The current prompt may already be recorded, so measure from Claude's last reply.
-    if not isinstance(transcript_path, str) or not transcript_path:
-        return None
-    try:
-        with Path(transcript_path).open("rb") as transcript:
-            transcript.seek(0, 2)
-            transcript.seek(max(0, transcript.tell() - TRANSCRIPT_TAIL_BYTES))
-            lines = transcript.read().decode("utf-8", errors="replace").splitlines()
-    except OSError:
-        return None
-    for line in reversed(lines):
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(entry, dict) or entry.get("type") != "assistant":
-            continue
-        try:
-            stamp = datetime.fromisoformat(str(entry["timestamp"]).replace("Z", "+00:00"))
-        except (KeyError, ValueError):
-            continue
-        return stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)
-    return None
 
 
 def _warm(

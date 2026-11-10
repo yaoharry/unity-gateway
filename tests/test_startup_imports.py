@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import zipfile
+from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
@@ -106,6 +107,52 @@ def test_installed_version_matches_importlib_metadata() -> None:
 def test_cli_import_defers_subcommand_specific_modules() -> None:
     _, loaded = _modules_loaded_after("import ucode.cli\nimport ucode.agents.claude", _LAZY_MODULES)
 
+    assert loaded == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"hook_event_name": "UserPromptSubmit", "transcript_path": "<recent reply>"},
+        {"hook_event_name": "UserPromptSubmit"},
+        {"hook_event_name": "Stop"},
+    ],
+)
+def test_cowork_hook_without_probe_skips_cli_and_mcp_imports(tmp_path: Path, payload) -> None:
+    # Cowork runs this hook before every prompt and waits for it.
+    transcript = tmp_path / "session.jsonl"
+    stamp = datetime.now(UTC).isoformat()
+    transcript.write_text(json.dumps({"type": "assistant", "timestamp": stamp}) + "\n")
+    if payload.get("transcript_path"):
+        payload = {**payload, "transcript_path": str(transcript)}
+    argv = [
+        "ug",
+        "cowork-hook",
+        "--host",
+        "https://workspace.example",
+        "--workspace-id",
+        "111",
+        "--server",
+        "github=https://workspace.example/api/2.0/mcp/github",
+    ]
+    output, loaded = _modules_loaded_after(
+        "import io, sys\n"
+        f"sys.argv = {argv!r}\n"
+        f"sys.stdin = io.StringIO({json.dumps(payload)!r})\n"
+        "from ucode.entrypoint import main\nmain()",
+        (
+            "ucode.cli",
+            "typer",
+            "rich",
+            "ucode.agents",
+            "ucode.databricks",
+            "ucode.workspace",
+            "anyio",
+            *_LAZY_MODULES,
+        ),
+    )
+
+    assert output == ""
     assert loaded == []
 
 

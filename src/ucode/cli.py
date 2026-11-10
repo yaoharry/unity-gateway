@@ -2874,22 +2874,20 @@ def cowork_hook_cmd(
     workspace_id: Annotated[str | None, typer.Option("--workspace-id", hidden=True)] = None,
 ) -> None:
     """Run the Cowork plugin's SessionStart and UserPromptSubmit hooks."""
-    import json
+    # `ug cowork-hook` normally starts in ucode.entrypoint without this CLI; both share run_hook.
     import sys
 
-    from ucode.agents.desktop.cowork_hooks import hook_output
+    from ucode.cowork_hook_runtime import run_hook
 
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except ValueError:
-        return
-    servers = dict(entry.split("=", 1) for entry in server if "=" in entry)
-    if workspace_id:
-        pin(host, workspace_id)
-    with redirect_stdout(sys.stderr):  # stdout is reserved for the hook's JSON
-        output = hook_output(payload, servers, host, profile, use_pat=use_pat)
-    if output:
-        sys.stdout.write(json.dumps(output))
+    run_hook(
+        sys.stdin.read(),
+        host,
+        server,
+        profile,
+        use_pat=use_pat,
+        workspace_id=workspace_id,
+        stdout=sys.stdout,
+    )
 
 
 @app.command("claude-desktop-auth", hidden=True)
